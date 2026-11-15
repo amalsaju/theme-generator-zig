@@ -50,3 +50,38 @@ pub const html_element = struct {
     // raylib requires null terminated strings
     selector: [:0]const u8, // unique value to select this element
 };
+
+pub const CSSProperty = enum {
+    background_color,
+    color,
+};
+
+pub const ColorValue = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+};
+
+pub const EdgeValue = struct {
+    left: i8,
+    right: i8,
+    top: i8,
+    bottom: i8,
+};
+
+pub const CSSPropertyValue = union(enum) {
+    color_value: ColorValue,
+    edge_value: EdgeValue,
+};
+
+// TODO: Add in ids and classes
+pub const CSSPropertyChangeEvent = struct {
+    element: u8, // which element is being changed
+    css_property: CSSProperty,
+    css_property_value: CSSPropertyValue,
+};
+
+pub const Event = union(enum) {
+    highlight: ?u8, // highlight event
+    change_property: CSSPropertyChangeEvent,
+};

@@ -3,10 +3,12 @@ const log = std.log.scoped(.server);
 const rl = @import("raylib");
 const rg = @import("raygui");
 const data = @import("data.zig");
+const shared_state = @import("shared_state.zig").State;
+const Event = @import("types.zig").Event;
 
 const MouseButtonState = enum { normal, hover, pressed };
 
-pub fn run() !void {
+pub fn run(io: std.Io, state: *shared_state) !void {
     // Initialization
     //--------------------------------------------------------------------------------------
     const screenWidth = 900;
@@ -27,7 +29,7 @@ pub fn run() !void {
     const row_height: u32 = 20;
     var scroll_content_offset: rl.Vector2 = .{ .x = 0, .y = 0 };
     var view: rl.Rectangle = .{ .x = 0, .y = 0, .width = 0, .height = 0 };
-    const content: rl.Rectangle = .{ .x = 20, .y = 20, .width = 200, .height = 1200 };
+    const content: rl.Rectangle = .{ .x = 20, .y = 20, .width = 200, .height = 500 };
 
     const indent_width_text: i32 = 10;
     var start_position_element: i32 = 0;
@@ -49,18 +51,31 @@ pub fn run() !void {
             &view,
         );
         scroll_content_offset.y = @min(0, scroll_content_offset.y);
-        log.info("Scroll: {}", .{scroll_content_offset});
+        //log.info("Scroll: {}", .{scroll_content_offset});
         start_position_element = @divCeil(@as(i32, @intFromFloat(scroll_content_offset.y)), row_height);
-        log.info("Start position: {}", .{start_position_element});
-        log.info("Scroll content offset: {}", .{@as(i32, @intFromFloat(scroll_content_offset.y))});
+        //log.info("Start position: {}", .{start_position_element});
+        //log.info("Scroll content offset: {}", .{@as(i32, @intFromFloat(scroll_content_offset.y))});
 
         const view_list = data.html_elements[@abs(start_position_element)..];
         const mouse_position = rl.Vector2{ .x = @floatFromInt(rl.getMouseX() - 20), .y = @floatFromInt(rl.getMouseY() - 20) }; // the padding
+        var send_data_id_previous: u32 = 0;
 
         if (rl.checkCollisionPointRec(mouse_position, view)) {
             state_mouse_button = .hover;
             log.info("Mouse inside view: {}", .{mouse_position});
             hover_id = @abs(@divFloor(@as(i32, @intFromFloat(mouse_position.y)), row_height));
+
+            if (send_data_id_previous != hover_id + @abs(start_position_element)) {
+                const event: Event = .{
+                    .highlight = @as(u8, @intCast(hover_id + @abs(start_position_element))),
+                };
+                _ = state.*.event_queue.put(io, &.{event}, 0) catch |err| {
+                    log.err("Error putting into event queue: {}", .{err});
+                };
+
+                send_data_id_previous = hover_id + @abs(start_position_element);
+            }
+
             if (rl.isMouseButtonDown(rl.MouseButton.left)) {
                 state_mouse_button = .pressed;
             }

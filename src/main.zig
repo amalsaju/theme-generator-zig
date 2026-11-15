@@ -6,13 +6,16 @@ const IpAddress = Io.net.IpAddress;
 const rl = @import("raylib");
 const rg = @import("raygui");
 const font = @import("font.zig");
-const gui = @import("gui_helpers.zig");
+const fui = @import("gui_helpers.zig");
 const sse = @import("sse.zig");
 const ui = @import("ui.zig");
-//
+const shared_state = @import("shared_state.zig").State;
+
 pub fn main(init: std.process.Init) !void {
-    sse.handle_server(init.io);
-    ui.run() catch |err| {
+    var state: shared_state = .{};
+    state.init();
+    sse.handle_server(init.io, &state);
+    ui.run(init.io, &state) catch |err| {
         log.err("{}", .{err});
     };
 }

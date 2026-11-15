@@ -1,13 +1,13 @@
 const std = @import("std");
 const log = std.log.scoped(.server);
+const Event = @import("types.zig").Event;
+const Data = @import("data.zig");
+const shared_state = @import("shared_state.zig").State;
 
 const LISTEN_ADDR = "127.0.0.1";
 const LISTEN_PORT = 8000;
 
-fn handleEvents(
-    io: std.Io,
-    req: *std.http.Server.Request,
-) !void {
+fn handleEvents(io: std.Io, req: *std.http.Server.Request, state: *shared_state) !void {
     // An empty buffer sends each write through
     // the streaming writer immediately.
     var event_buffer: [0]u8 = .{};
@@ -32,32 +32,51 @@ fn handleEvents(
         },
     );
 
-    var last_sent: ?bool = null;
+    // use the std.io.queue
+    // Ui will add events to it
+    // for now, it will be highlight events and property change events
+    // could test it out just with the color
+    //
 
     while (true) {
-        const current = has_changed.load(.monotonic);
 
         // TODO: Create a message queue
         // from the UI add in requests for sse
         // consume the requests here
 
-        if (last_sent == null or last_sent.? != current) {
-            const event = if (current)
-                "event: theme\ndata: red\n\n"
-            else
-                "event: highlight\ndata: \"html > body > a\"\n\n";
+        const ui_event = state.*.event_queue.getOne(io) catch |err| switch (err) {
+            error.Closed, error.Canceled => {
+                log.info("Error getting event: {}", .{err});
+                return;
+            },
+        };
 
-            try body.writer.writeAll(event);
-            try body.flush();
-
-            last_sent = current;
+        switch (ui_event) {
+            .highlight => |id| {
+                if (id) |value| {
+                    log.info("highlight event received: {any}", .{id});
+                    const selector = Data.get_element_selector_from_id(value);
+                    try body.writer.print(
+                        "event: highlight\ndata: {s} \n\n",
+                        .{selector},
+                    );
+                    try body.flush();
+                } else {
+                    log.info("highlight event received:", .{});
+                    // remove highlight
+                    const event = "event: highlight\ndata: \n\n";
+                    try body.writer.writeAll(event);
+                    try body.flush();
+                }
+            },
+            else => |value| {
+                log.info("other event received: {any}", .{value});
+            },
         }
-
-        try io.sleep(.fromMilliseconds(100), .awake);
     }
 }
 
-fn handleStream(io: std.Io, stream: std.Io.net.Stream) void {
+fn handleStream(io: std.Io, stream: std.Io.net.Stream, state: *shared_state) void {
     defer stream.close(io);
 
     var read_buffer: [4096]u8 = undefined;
@@ -81,26 +100,34 @@ fn handleStream(io: std.Io, stream: std.Io.net.Stream) void {
         \\<script>
         \\(() => {
         \\    const events = new EventSource("/__events");
-        \\        let highlight_element_previous = null;
+        \\    let previousElement = null;
         \\
-        \\        events.addEventListener("theme", (event) => {
-        \\            console.log("Colour received:", event.data);
-        \\           document.documentElement.style.setProperty(
-        \\              "--bg",
-        \\             event.data
-        \\            );
-        \\       });
-        \\        events.addEventListener("highlight", (event) => {
-        \\            console.log("Colour received:", event.data);
-        \\let highlight_element = document.querySelector($event.data);
-        \\if(highlight_element != highlight_element_previous) {
-        \\    highlight_element_previous.style.outline = "";
-        \\    highlight_element.style.outline = "thick solid #0000FF";
-        \\    highlight_element_previous = highlight_element;
-        \\}
-        \\           });
+        \\    events.addEventListener("theme", (event) => {
+        \\        document.documentElement.style.setProperty("--bg", event.data);
+        \\    });
+        \\
+        \\    events.addEventListener("highlight", (event) => {
+        \\        const selector = event.data.trim();
+        \\        const element = selector
+        \\            ? document.querySelector(selector)
+        \\            : null;
+        \\
+        \\        if (element === previousElement) return;
+        \\
+        \\        if (previousElement) {
+        \\            previousElement.style.removeProperty("outline");
+        \\        }
+        \\
+        \\        if (element) {
+        \\            element.style.outline = "thick solid #0000FF";
+        \\        }
+        \\
+        \\        previousElement = element;
+        \\        console.log("Element: ", element);
+        \\    });
+        \\
         \\    events.onerror = () => {
-        \\        console.warn("Theme preview connection lost");
+        \\        console.warn("SSE connection lost");
         \\    };
         \\})();
         \\</script>
@@ -133,7 +160,7 @@ fn handleStream(io: std.Io, stream: std.Io.net.Stream) void {
             req.respond(test_css[0..bytes_read_test_css], .{ .status = .ok }) catch unreachable;
         }
         if (std.mem.eql(u8, req.head.target[0..], "/__events")) {
-            handleEvents(io, &req) catch |err| {
+            handleEvents(io, &req, state) catch |err| {
                 log.info("SSE connection ended: {}", .{err});
                 return;
             };
@@ -141,7 +168,7 @@ fn handleStream(io: std.Io, stream: std.Io.net.Stream) void {
     }
 }
 
-fn startServerAsync(io: std.Io) !void {
+fn startServerAsync(io: std.Io, state: *shared_state) !void {
     log.info("Listening on http://{s}:{d}", .{ LISTEN_ADDR, LISTEN_PORT });
 
     const addr = std.Io.net.IpAddress.parseIp4(LISTEN_ADDR, LISTEN_PORT) catch unreachable;
@@ -154,16 +181,16 @@ fn startServerAsync(io: std.Io) !void {
 
     while (true) {
         const stream = try server.accept(io);
-        group.concurrent(io, handleStream, .{ io, stream }) catch |err| {
+        group.concurrent(io, handleStream, .{ io, stream, state }) catch |err| {
             log.err("Failed to handle connection: {}", .{err});
             stream.close(io);
         };
     }
 }
 
-pub fn handle_server(io: std.Io) void {
+pub fn handle_server(io: std.Io, state: *shared_state) void {
     log.info("Starting server", .{});
-    const server_thread = std.Thread.spawn(.{}, startServerAsync, .{io}) catch |err| switch (err) {
+    const server_thread = std.Thread.spawn(.{}, startServerAsync, .{ io, state }) catch |err| switch (err) {
         else => {
             log.err("Failed to start server: {}", .{err});
             return;
