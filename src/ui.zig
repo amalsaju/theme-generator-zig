@@ -5,8 +5,10 @@ const rg = @import("raygui");
 const data = @import("data.zig");
 const shared_state = @import("shared_state.zig").State;
 const Event = @import("types.zig").Event;
+const Theme = @import("theme.zig").Theme;
 
 const MouseButtonState = enum { normal, hover, pressed };
+const ThemeStyle = enum { light, dark };
 
 pub fn run(io: std.Io, state: *shared_state) !void {
     // Initialization
@@ -15,6 +17,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
     const screenHeight = 450;
 
     var state_mouse_button: MouseButtonState = .normal;
+    var theme_style: ThemeStyle = .dark;
 
     //var show_color_picker: bool = false;
 
@@ -29,20 +32,34 @@ pub fn run(io: std.Io, state: *shared_state) !void {
     const row_height: u32 = 20;
     var scroll_content_offset: rl.Vector2 = .{ .x = 0, .y = 0 };
     var view: rl.Rectangle = .{ .x = 0, .y = 0, .width = 0, .height = 0 };
-    const content: rl.Rectangle = .{ .x = 20, .y = 20, .width = 200, .height = 500 };
+    const content: rl.Rectangle = .{ .x = 20, .y = 20, .width = 200, .height = data.html_elements.len * 30 };
 
     const indent_width_text: i32 = 10;
     var start_position_element: i32 = 0;
     var hover_id: u32 = 0;
     var selected_id: u32 = 0;
+
+    var order_spinner: i32 = 20;
+    var order_value_box: i32 = 20;
     //const indent_width_connection: i32 = 5;
 
     // Main game loop
     while (!rl.windowShouldClose()) {
+        if (rl.isKeyPressed(rl.KeyboardKey.t)) {
+            if (theme_style == .light) {
+                theme_style = .dark;
+            } else {
+                theme_style = .light;
+            }
+        }
+
+        const theme: *const Theme = if (theme_style == .light) &Theme.Light else &Theme.Dark;
+
         rl.beginDrawing();
 
-        rl.clearBackground(.white);
+        rl.clearBackground(theme.background);
 
+        rg.setStyle(.default, .background_color, @intCast(rl.colorToInt(theme.background)));
         _ = rg.scrollPanel(
             .{ .x = 0, .y = 0, .width = 250, .height = 700 },
             null,
@@ -98,7 +115,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
         }
 
         if (state_mouse_button == .pressed) {
-            selected_id = hover_id + @abs(start_position_element);
+            selected_id = @min(hover_id + @abs(start_position_element), data.html_elements.len - 1);
         }
 
         //TODO: implementing scroll
@@ -119,22 +136,34 @@ pub fn run(io: std.Io, state: *shared_state) !void {
             const x = @as(i32, @intFromFloat(content.x)) + (level * indent_width_text);
             const y = @as(i32, @intFromFloat(content.y)) + index * row_height;
 
-            if (i == hover_id and state_mouse_button == .hover) {
-                rl.drawRectangle(content.x, y - 4, content.width, 20, .yellow);
+            if (value.id == data.html_elements[selected_id].id) {
+                rl.drawRectangleRounded(.{ .x = content.x - 6.0, .y = @as(f32, @floatFromInt(y)) - 6.0, .width = content.width, .height = 22 }, 0.40, 0, theme.secondary);
                 rl.drawText(
                     @tagName(value.html_tag),
                     x,
                     y - 4,
                     20,
-                    .blue,
+                    theme.secondary_foreground,
                 );
-            } else if (value.id == data.html_elements[selected_id].id) {
+            } else if (i == hover_id and state_mouse_button == .hover) {
+                //rl.drawRectangleRounded(.{ .x = content.x - 6.0, .y = @as(f32, @floatFromInt(y)) - 6.0, .width = content.width, .height = 22 }, 0.40, 0, theme.chart_1);
+                //rl.drawRectangle(content.x, y - 4, content.width, 20, .gray);
                 rl.drawText(
                     @tagName(value.html_tag),
                     x,
                     y - 4,
                     20,
-                    .red,
+                    theme.secondary,
+                );
+            } else if (i == hover_id and state_mouse_button == .pressed) {
+                rl.drawRectangleRounded(.{ .x = content.x - 6.0, .y = @as(f32, @floatFromInt(y)) - 6.0, .width = content.width, .height = 22 }, 0.40, 0, theme.secondary);
+                //rl.drawRectangle(content.x, y - 4, content.width, 20, .gray);
+                rl.drawText(
+                    @tagName(value.html_tag),
+                    x,
+                    y - 4,
+                    20,
+                    theme.secondary_foreground,
                 );
             } else {
                 rl.drawText(
@@ -142,7 +171,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
                     x,
                     y - 4,
                     20,
-                    .black,
+                    theme.foreground,
                 );
             }
         }
@@ -153,6 +182,10 @@ pub fn run(io: std.Io, state: *shared_state) !void {
             20,
             .red,
         );
+
+        _ = rg.spinner(.{ .x = 400, .y = 100, .width = 70, .height = 20 }, "Spinner", &order_spinner, 0, 100, true);
+        _ = rg.valueBox(.{ .x = 400, .y = 200, .width = 70, .height = 20 }, "Value box", &order_value_box, 0, 100, true);
+
         rl.endDrawing();
     }
 }
