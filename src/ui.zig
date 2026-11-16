@@ -58,7 +58,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
 
         const view_list = data.html_elements[@abs(start_position_element)..];
         const mouse_position = rl.Vector2{ .x = @floatFromInt(rl.getMouseX() - 20), .y = @floatFromInt(rl.getMouseY() - 20) }; // the padding
-        var send_data_id_previous: u32 = 0;
+        var send_data_id_previous: ?u32 = 0;
 
         if (rl.checkCollisionPointRec(mouse_position, view)) {
             state_mouse_button = .hover;
@@ -79,13 +79,22 @@ pub fn run(io: std.Io, state: *shared_state) !void {
             if (rl.isMouseButtonDown(rl.MouseButton.left)) {
                 state_mouse_button = .pressed;
             }
-            if (rl.isMouseButtonUp(rl.MouseButton.left)) {
+            if (state_mouse_button == .pressed and rl.isMouseButtonUp(rl.MouseButton.left)) {
                 state_mouse_button = .normal;
             }
 
             log.info("Selected Id: {}", .{hover_id});
         } else {
             state_mouse_button = .normal;
+            if (send_data_id_previous != null) {
+                const event: Event = .{
+                    .highlight = null,
+                };
+                _ = state.*.event_queue.put(io, &.{event}, 0) catch |err| {
+                    log.err("Error putting into event queue: {}", .{err});
+                };
+                send_data_id_previous = null;
+            }
         }
 
         if (state_mouse_button == .pressed) {
@@ -110,7 +119,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
             const x = @as(i32, @intFromFloat(content.x)) + (level * indent_width_text);
             const y = @as(i32, @intFromFloat(content.y)) + index * row_height;
 
-            if (i == hover_id) {
+            if (i == hover_id and state_mouse_button == .hover) {
                 rl.drawRectangle(content.x, y - 4, content.width, 20, .yellow);
                 rl.drawText(
                     @tagName(value.html_tag),
