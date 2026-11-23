@@ -15,7 +15,7 @@ pub const state = struct {
     storage: [64]event = undefined,
     event_queue: std.Io.Queue(event) = undefined,
     app_state: application_state = undefined,
-    working_directory: *const [40:0]u8 = "C:\\Users\\bolsh\\projects\\melb_css\\website",
+    working_directory: [256:0]u8 = @splat(0),
     css_style_list: [50]style = undefined, // we only have a max of like 43 elements
     css_style_list_count: u8 = 0,
     theme_name: string = .{},
@@ -27,6 +27,7 @@ pub const state = struct {
 
         const default_theme_name = "DefaultTheme";
         const default_author_name = "Unknown";
+        const default_path = "C:\\Users\\bolsh\\projects\\melb_css\\website";
 
         // add default author and theme values
         self.theme_name = .{
@@ -43,5 +44,8 @@ pub const state = struct {
         };
         @memcpy(self.author_name.value[0..default_author_name.len], default_author_name);
         self.author_name.length = default_author_name.len;
+
+        @memcpy(self.working_directory[0..default_path.len], default_path);
+        self.app_state = .ui_1;
     }
 };

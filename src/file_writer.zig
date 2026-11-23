@@ -35,7 +35,7 @@ pub fn write_rule(writer: *std.Io.Writer, selector: []const u8, declarations: []
 }
 
 pub fn save_css(io: std.Io, state: *const shared_state) !void {
-    const dir = try std.Io.Dir.openDirAbsolute(io, state.working_directory, .{});
+    const dir = try std.Io.Dir.openDirAbsolute(io, state.working_directory[0..], .{});
     defer dir.close(io);
 
     var path_buf: [255]u8 = undefined;
@@ -81,7 +81,7 @@ pub fn save_css(io: std.Io, state: *const shared_state) !void {
 }
 
 pub fn update_index_html(io: std.Io, state: *const shared_state) !void {
-    const dir = try std.Io.Dir.openDirAbsolute(io, state.working_directory, .{});
+    const dir = try std.Io.Dir.openDirAbsolute(io, state.working_directory[0..], .{});
     defer dir.close(io);
 
     var index_html: [10 * 1024]u8 = undefined;

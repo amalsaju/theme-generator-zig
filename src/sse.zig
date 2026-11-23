@@ -86,7 +86,7 @@ fn handleStream(io: std.Io, stream: std.Io.net.Stream, state: *shared_state) voi
     var writer = stream.writer(io, &write_buffer);
 
     var http_server = std.http.Server.init(&reader.interface, &writer.interface);
-    const cwd: std.Io.Dir = std.Io.Dir.openDirAbsolute(io, state.working_directory, .{ .iterate = true }) catch unreachable;
+    const cwd: std.Io.Dir = std.Io.Dir.openDirAbsolute(io, state.*.working_directory[0..], .{ .iterate = true }) catch unreachable;
 
     cwd.access(io, "index.html", .{}) catch |err| {
         log.err("index.html access error: {}", .{err});
