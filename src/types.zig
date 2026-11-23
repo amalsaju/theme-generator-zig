@@ -1,4 +1,8 @@
-pub const Tag = enum {
+pub const string = struct {
+    value: [255]u8 = undefined,
+    length: u8 = 0,
+};
+pub const tag = enum {
     html,
     body,
     header,
@@ -44,44 +48,83 @@ pub const html_element_group_class_names = struct {
 
 pub const html_element = struct {
     id: u16,
-    html_tag: Tag,
+    html_tag: tag,
     level: u8,
     //left_node: u1 = 0,
     // raylib requires null terminated strings
     selector: [:0]const u8, // unique value to select this element
 };
-
-pub const CSSProperty = enum {
-    background_color,
-    color,
+pub const css_property_names = [_][]const u8{
+    "background-color",
+    "color",
+    "font-size",
+    "margin",
+    "padding",
 };
 
-pub const ColorValue = struct {
+pub const css_property = enum {
+    background_color,
+    color,
+    font_size,
+    margin,
+    padding,
+};
+
+pub const color_value = struct {
     r: u8,
     g: u8,
     b: u8,
 };
 
-pub const EdgeValue = struct {
-    left: i8,
-    right: i8,
-    top: i8,
-    bottom: i8,
+pub const edge_value = struct {
+    left: i32,
+    right: i32,
+    top: i32,
+    bottom: i32,
 };
 
-pub const CSSPropertyValue = union(enum) {
-    color_value: ColorValue,
-    edge_value: EdgeValue,
+pub const css_property_value = union(enum) {
+    color_value: color_value,
+    edge_value: edge_value,
+    size_value: i32,
+};
+
+pub const css_declaration = struct {
+    css_property: css_property,
+    css_property_value: css_property_value,
 };
 
 // TODO: Add in ids and classes
-pub const CSSPropertyChangeEvent = struct {
+pub const css_property_change_event = struct {
     element: u8, // which element is being changed
-    css_property: CSSProperty,
-    css_property_value: CSSPropertyValue,
+    css_property: css_property,
+    css_property_value: css_property_value,
 };
 
-pub const Event = union(enum) {
+pub const selector_type = enum {
+    id, // html id property
+    selector, // the full path
+    class, // which class the declaration applies to, check the class array
+    tag, // html element
+};
+
+pub const style = struct {
+    id: u8, // id in the data file
+    id_css_declarations: [255]css_declaration,
+    selector_css_declarations: [255]css_declaration,
+    tag_css_declarations: [255]css_declaration,
+
+    html_id: string,
+    // you don't need the selector and tag, you can get them from the data file
+    // selector: string,
+    // tag: string,
+
+    id_css_declarations_count: u8,
+    selector_css_declarations_count: u8,
+    tag_css_declarations_count: u8,
+};
+
+pub const event = union(enum) {
     highlight: ?u8, // highlight event
-    change_property: CSSPropertyChangeEvent,
+    change_property: css_property_change_event,
 };

@@ -2,7 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.server);
 const Event = @import("types.zig").Event;
 const Data = @import("data.zig");
-const shared_state = @import("shared_state.zig").State;
+const shared_state = @import("shared_state.zig").state;
 
 const LISTEN_ADDR = "127.0.0.1";
 const LISTEN_PORT = 8000;
@@ -46,7 +46,7 @@ fn handleEvents(io: std.Io, req: *std.http.Server.Request, state: *shared_state)
 
         const ui_event = state.*.event_queue.getOne(io) catch |err| switch (err) {
             error.Closed, error.Canceled => {
-                log.info("Error getting event: {}", .{err});
+                log.err("Error getting event: {}", .{err});
                 return;
             },
         };
@@ -54,7 +54,7 @@ fn handleEvents(io: std.Io, req: *std.http.Server.Request, state: *shared_state)
         switch (ui_event) {
             .highlight => |id| {
                 if (id) |value| {
-                    log.info("highlight event received: {any}", .{id});
+                    //log.info("highlight event received: {any}", .{id});
                     const selector = Data.get_element_selector_from_id(value);
                     try body.writer.print(
                         "event: highlight\ndata: {s} \n\n",
@@ -62,7 +62,7 @@ fn handleEvents(io: std.Io, req: *std.http.Server.Request, state: *shared_state)
                     );
                     try body.flush();
                 } else {
-                    log.info("highlight event received:", .{});
+                    //log.info("highlight event received:", .{});
                     // remove highlight
                     const event = "event: highlight\ndata: \n\n";
                     try body.writer.writeAll(event);
@@ -86,16 +86,24 @@ fn handleStream(io: std.Io, stream: std.Io.net.Stream, state: *shared_state) voi
     var writer = stream.writer(io, &write_buffer);
 
     var http_server = std.http.Server.init(&reader.interface, &writer.interface);
+    const cwd: std.Io.Dir = std.Io.Dir.openDirAbsolute(io, state.working_directory, .{ .iterate = true }) catch unreachable;
 
-    const cwd = std.Io.Dir.cwd();
+    cwd.access(io, "index.html", .{}) catch |err| {
+        log.err("index.html access error: {}", .{err});
+        return;
+    };
+    cwd.access(io, "styles/default.css", .{}) catch |err| {
+        log.err("default.css access error: {}", .{err});
+        return;
+    };
 
     // TODO: allocation for larger size
     // because MelbCSS index.html itself is 9KB
-    var test_html: [1024]u8 = undefined;
-    const html = cwd.readFile(io, "src/test.html", &test_html) catch unreachable;
+    var index_html: [10 * 1024]u8 = undefined;
+    const html = cwd.readFile(io, "index.html", &index_html) catch unreachable;
 
     const pos = std.mem.lastIndexOf(u8, html, "</html>") orelse 0;
-    var modified_html: [64 * 1024]u8 = undefined;
+    var modified_html: [20 * 1024]u8 = undefined;
     const injected_js =
         \\<script>
         \\(() => {
@@ -134,36 +142,65 @@ fn handleStream(io: std.Io, stream: std.Io.net.Stream, state: *shared_state) voi
     ;
 
     const result = std.mem.print(modified_html[0..], "{s}{s}{s}", .{ html[0..pos], injected_js, html[pos..html.len] }) catch unreachable;
-    std.debug.print("\nModified Html:{s} ", .{result[0..result.len]});
+    //std.debug.print("\nModified Html:{s} ", .{result[0..result.len]});
 
-    const file_css = cwd.openFile(io, "src/test.css", .{}) catch unreachable;
-    defer file_css.close(io);
-
-    var test_css: [1024]u8 = undefined;
-    var file_reader_css = file_css.reader(io, &test_css);
-    const reader_interface_css = &file_reader_css.interface;
-
-    const bytes_read_test_css = reader_interface_css.readSliceShort(&test_css) catch unreachable;
-
-    while (true) {
+    while (state.*.app_state != .closing) {
         var req = http_server.receiveHead() catch |err| switch (err) {
             error.HttpConnectionClosing => return,
             else => return,
         };
-        log.info("Req {s}", .{req.head.target[0..]});
+        log.info("Req {s} \n Content Type: {any}", .{ req.head.target[0..], req.head });
 
         if (std.mem.eql(u8, req.head.target[0..], "/")) {
             req.respond(result[0..result.len], .{ .status = .ok }) catch unreachable;
-        }
-
-        if (std.mem.eql(u8, req.head.target[0..], "/test.css")) {
-            req.respond(test_css[0..bytes_read_test_css], .{ .status = .ok }) catch unreachable;
-        }
-        if (std.mem.eql(u8, req.head.target[0..], "/__events")) {
+        } else if (std.mem.eql(u8, req.head.target[0..], "/__events")) {
             handleEvents(io, &req, state) catch |err| {
                 log.info("SSE connection ended: {}", .{err});
                 return;
             };
+        } else if ((std.mem.startsWith(u8, req.head.target[0..], "/img")) or (std.mem.startsWith(u8, req.head.target[0..], "/styles"))) {
+
+            // Remove the first '/' from the request
+            const file = cwd.openFile(io, req.head.target[1..], .{}) catch |err| switch (err) {
+                error.BadPathName => {
+                    std.log.err("path: {s}\n err: {any}", .{ req.head.target[1..], err });
+                    return;
+                },
+                else => return,
+            };
+
+            defer file.close(io);
+
+            // 10kb size
+            var file_buf: [10 * 1024]u8 = undefined;
+            var file_reader = file.reader(io, &file_buf);
+            const reader_interface = &file_reader.interface;
+
+            const bytes_read = reader_interface.readSliceShort(&file_buf) catch unreachable;
+
+            if (std.mem.startsWith(u8, req.head.target[0..], "/img")) {
+                req.respond(file_buf[0..bytes_read], .{
+                    .status = .ok,
+                    .extra_headers = &.{
+                        .{
+                            .name = "Content-Type",
+                            .value = "image/svg+xml",
+                        },
+                    },
+                }) catch unreachable;
+            } else {
+                req.respond(file_buf[0..bytes_read], .{
+                    .status = .ok,
+                    .extra_headers = &.{
+                        .{
+                            .name = "Content-Type",
+                            .value = "text/css",
+                        },
+                    },
+                }) catch unreachable;
+            }
+        } else {
+            req.respond("", .{ .status = .not_found }) catch unreachable;
         }
     }
 }
@@ -179,7 +216,7 @@ fn startServerAsync(io: std.Io, state: *shared_state) !void {
     var group: std.Io.Group = .init;
     defer group.cancel(io);
 
-    while (true) {
+    while (state.*.app_state != .closing) {
         const stream = try server.accept(io);
         group.concurrent(io, handleStream, .{ io, stream, state }) catch |err| {
             log.err("Failed to handle connection: {}", .{err});

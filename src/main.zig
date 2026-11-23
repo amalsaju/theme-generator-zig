@@ -9,7 +9,8 @@ const font = @import("font.zig");
 const fui = @import("gui_helpers.zig");
 const sse = @import("sse.zig");
 const ui = @import("ui.zig");
-const shared_state = @import("shared_state.zig").State;
+const shared_state = @import("shared_state.zig").state;
+const file_writer = @import("file_writer.zig");
 
 pub fn main(init: std.process.Init) !void {
     var state: shared_state = .{};
@@ -18,10 +19,17 @@ pub fn main(init: std.process.Init) !void {
     ui.run(init.io, &state) catch |err| {
         log.err("{}", .{err});
     };
+
+    if (state.update_files) {
+        file_writer.save_css(init.io, &state) catch unreachable;
+        file_writer.update_index_html(init.io, &state) catch unreachable;
+    }
+
+    std.log.info("Quiting...", .{});
 }
 
 // pub fn main() !void {
 //     ui.run() catch |err| {
-//         log.info("{}", .{err});
+//         log.err("{}", .{err});
 //     };
 // }

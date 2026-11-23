@@ -3,12 +3,33 @@ const log = std.log.scoped(.server);
 const rl = @import("raylib");
 const rg = @import("raygui");
 const data = @import("data.zig");
-const shared_state = @import("shared_state.zig").State;
-const Event = @import("types.zig").Event;
+const shared_state = @import("shared_state.zig").state;
+const event = @import("types.zig").event;
 const Theme = @import("theme.zig").Theme;
+const types = @import("types.zig");
 
 const MouseButtonState = enum { normal, hover, pressed };
 const ThemeStyle = enum { light, dark };
+var css_events_list: [256]types.css_property_change_event = .{};
+
+// pub fn write_data_to_file(io: std.Io, state: *shared_state) void {
+//     const dir = std.Io.Dir.openDirAbsolute(io, state.working_directory, .{ .iterate = true }) catch unreachable;
+//     const file = try dir.createFile(io, "styles/test.css", .{});
+//     defer file.close(io);
+//
+//     var buf: [20 * 1024]u8 = "";
+//
+//     // iterate through the style to get id, selector and tag
+//     for (state.css_style_list, 0..) |value, i| {
+//
+//         // write the id, then { then the declarations
+//         // when it ends write }
+//
+//         for (value.tag_css_declarations, 0..) |tag_values, j| {
+//             buf = buf ++ tag_values.css_property
+//         }
+//     }
+// }
 
 pub fn run(io: std.Io, state: *shared_state) !void {
     // Initialization
@@ -19,6 +40,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
     var state_mouse_button: MouseButtonState = .normal;
     var theme_style: ThemeStyle = .dark;
 
+    var prng: std.Random.DefaultPrng = .init(0);
     //var show_color_picker: bool = false;
 
     //var color_selected = rl.Color{ .r = 150, .g = 150, .b = 150, .a = 1 };
@@ -31,23 +53,9 @@ pub fn run(io: std.Io, state: *shared_state) !void {
 
     const row_height: u32 = 20;
     var scroll_content_offset_left: rl.Vector2 = .{ .x = 0, .y = 0 };
-    var scroll_content_offset_right: rl.Vector2 = .{ .x = 0, .y = 0 };
     var view_html_tree: rl.Rectangle = .{ .x = 0, .y = 0, .width = 0, .height = 0 };
     const scroll_content_left: rl.Rectangle = .{ .x = 20, .y = 20, .width = 200, .height = data.html_elements.len * 30 };
     const content_right: rl.Rectangle = .{ .x = 220, .y = 20, .width = 700, .height = screenHeight - 100 };
-    const scroll_bounds_right: rl.Rectangle = .{
-        .x = content_right.x + 50,
-        .y = content_right.y + 170,
-        .width = 700,
-        .height = content_right.height - 200,
-    };
-    const scroll_content_right: rl.Rectangle = .{
-        .x = content_right.x + 50,
-        .y = content_right.y + 170,
-        .width = scroll_bounds_right.width - 20,
-        .height = content_right.height - 200,
-    };
-    var view_css_property: rl.Rectangle = .{ .x = 0, .y = 0, .width = 0, .height = 0 };
 
     var element_check_box = true;
     var selector_check_box = false;
@@ -62,6 +70,29 @@ pub fn run(io: std.Io, state: *shared_state) !void {
     // var order_spinner: i32 = 20;
     // var order_value_box: i32 = 20;
     //const indent_width_connection: i32 = 5;
+    var buf_background_color: types.color_value = .{
+        .r = 255,
+        .g = 255,
+        .b = 255,
+    };
+    var buf_text_color: types.color_value = .{
+        .r = 255,
+        .g = 255,
+        .b = 255,
+    };
+    var buf_font_size: i32 = 20;
+    var buf_margin: types.edge_value = .{
+        .left = 0,
+        .right = 0,
+        .top = 0,
+        .bottom = 0,
+    };
+    var buf_padding: types.edge_value = .{
+        .left = 0,
+        .right = 0,
+        .top = 0,
+        .bottom = 0,
+    };
 
     // Main game loop
     while (!rl.windowShouldClose()) {
@@ -82,6 +113,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
         rg.setStyle(.default, .text_color_normal, @intCast(rl.colorToInt(theme.foreground)));
 
         rg.setStyle(.default, .background_color, @intCast(rl.colorToInt(theme.background)));
+
         _ = rg.scrollPanel(
             .{ .x = 0, .y = 0, .width = 250, .height = 700 },
             null,
@@ -98,7 +130,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
         const view_list = data.html_elements[@abs(start_position_element)..];
         const mouse_position = rl.Vector2{ .x = @floatFromInt(rl.getMouseX() - 20), .y = @floatFromInt(rl.getMouseY() - 20) }; // the padding
         //
-        log.info("Mouse position: {}", .{mouse_position});
+        //log.info("Mouse position: {}", .{mouse_position});
         var send_data_id_previous: ?u32 = 0;
 
         if (rl.checkCollisionPointRec(mouse_position, view_html_tree)) {
@@ -107,10 +139,10 @@ pub fn run(io: std.Io, state: *shared_state) !void {
             hover_id = @abs(@divFloor(@as(i32, @intFromFloat(mouse_position.y)), row_height));
 
             if (send_data_id_previous != hover_id + @abs(start_position_element)) {
-                const event: Event = .{
+                const event_to_sent: event = .{
                     .highlight = @as(u8, @intCast(hover_id + @abs(start_position_element))),
                 };
-                _ = state.*.event_queue.put(io, &.{event}, 0) catch |err| {
+                _ = state.*.event_queue.put(io, &.{event_to_sent}, 0) catch |err| {
                     log.err("Error putting into event queue: {}", .{err});
                 };
 
@@ -125,13 +157,13 @@ pub fn run(io: std.Io, state: *shared_state) !void {
             }
 
             log.info("Selected Id: {}", .{hover_id});
-        } else {
+        } else if (state_mouse_button != .normal) {
             state_mouse_button = .normal;
             if (send_data_id_previous != null) {
-                const event: Event = .{
+                const event_to_sent: event = .{
                     .highlight = null,
                 };
-                _ = state.*.event_queue.put(io, &.{event}, 0) catch |err| {
+                _ = state.*.event_queue.put(io, &.{event_to_sent}, 0) catch |err| {
                     log.err("Error putting into event queue: {}", .{err});
                 };
                 send_data_id_previous = null;
@@ -236,7 +268,7 @@ pub fn run(io: std.Io, state: *shared_state) !void {
 
         rg.setStyle(.default, .text_size, 20);
         rg.setStyle(.default, .text_padding, 10);
-        rg.setStyle(.checkbox, .text_color_normal, @intCast(rl.colorToInt(theme.secondary)));
+        rg.setStyle(.default, .text_color_normal, @intCast(rl.colorToInt(theme.secondary)));
         _ = rg.checkBox(.{ .x = content_right.x + 50, .y = content_right.y + 120, .width = 20, .height = 20 }, "element", &element_check_box);
         _ = rg.checkBox(.{ .x = content_right.x + 175, .y = content_right.y + 120, .width = 20, .height = 20 }, "selector", &selector_check_box);
         _ = rg.checkBox(.{ .x = content_right.x + 300, .y = content_right.y + 120, .width = 20, .height = 20 }, "id", &id_check_box);
@@ -250,16 +282,90 @@ pub fn run(io: std.Io, state: *shared_state) !void {
             theme.muted,
         );
 
-        //_ = rg.spinner(.{ .x = 400, .y = 100, .width = 70, .height = 20 }, "Spinner", &order_spinner, 0, 100, true);
-
-        _ = rg.scrollPanel(
-            scroll_bounds_right,
-            null,
-            scroll_content_right,
-            &scroll_content_offset_right,
-            &view_css_property,
+        // background color
+        rl.drawText(
+            rl.textFormat("background color: #%02X%02X%02X ", .{ buf_background_color.r, buf_background_color.g, buf_background_color.b }),
+            content_right.x + 50,
+            content_right.y + 170,
+            20,
+            theme.secondary,
         );
+        rl.drawRectangleLines(content_right.x + 400, content_right.y + 170, 20, 20, theme.accent);
+        rl.drawRectangle(content_right.x + 402, content_right.y + 172, 16, 16, theme.primary);
+
+        // color
+        rl.drawText(
+            rl.textFormat("text color: # %02X%02X%02X ", .{ buf_text_color.r, buf_text_color.g, buf_text_color.b }),
+            content_right.x + 50,
+            content_right.y + 200,
+            20,
+            theme.secondary,
+        );
+        rl.drawRectangleLines(content_right.x + 400, content_right.y + 200, 20, 20, theme.accent);
+        rl.drawRectangle(content_right.x + 402, content_right.y + 202, 16, 16, theme.primary);
+
+        // font size
+        rl.drawText(
+            rl.textFormat("font size: {d}px ", .{buf_font_size}),
+            content_right.x + 280,
+            content_right.y + 230,
+            20,
+            theme.secondary,
+        );
+        rl.drawRectangleLines(content_right.x + 400, content_right.y + 230, 20, 20, theme.accent);
+        rl.drawRectangle(content_right.x + 402, content_right.y + 232, 16, 16, theme.secondary);
+
+        // padding
+        rl.drawText(
+            rl.textFormat("padding: {d}px {d}px {d}px {d}px", .{ buf_padding.top, buf_padding.right, buf_padding.bottom, buf_padding.left }),
+            content_right.x + 50,
+            content_right.y + 260,
+            20,
+            theme.secondary,
+        );
+        rl.drawRectangleLines(content_right.x + 400, content_right.y + 260, 20, 20, theme.accent);
+        rl.drawRectangle(content_right.x + 402, content_right.y + 262, 16, 16, theme.primary);
+
+        // margin
+        rl.drawText(
+            rl.textFormat("margin: {d}px {d}px {d}px {d}px ", .{ buf_margin.top, buf_margin.right, buf_margin.bottom, buf_margin.left }),
+            content_right.x + 50,
+            content_right.y + 290,
+            20,
+            theme.secondary,
+        );
+        rl.drawRectangleLines(content_right.x + 400, content_right.y + 290, 20, 20, theme.accent);
+        rl.drawRectangle(content_right.x + 402, content_right.y + 292, 16, 16, theme.primary);
+
+        if (rg.button(.{ .x = content_right.x + 400, .y = content_right.y + 350, .width = 300, .height = 100 }, "randomize")) {
+            const rand = prng.random();
+            buf_background_color = .{
+                .r = rand.intRangeAtMost(u8, 0, 255),
+                .g = rand.intRangeAtMost(u8, 0, 255),
+                .b = rand.intRangeAtMost(u8, 0, 255),
+            };
+            buf_text_color = .{
+                .r = rand.intRangeAtMost(u8, 0, 255),
+                .g = rand.intRangeAtMost(u8, 0, 255),
+                .b = rand.intRangeAtMost(u8, 0, 255),
+            };
+            buf_font_size = rand.intRangeAtMost(u8, 10, 32);
+            buf_padding = .{
+                .top = rand.intRangeAtMost(u8, 0, 255),
+                .right = rand.intRangeAtMost(u8, 0, 255),
+                .bottom = rand.intRangeAtMost(u8, 0, 255),
+                .left = rand.intRangeAtMost(u8, 0, 255),
+            };
+
+            buf_margin = .{
+                .top = rand.intRangeAtMost(u8, 0, 255),
+                .right = rand.intRangeAtMost(u8, 0, 255),
+                .bottom = rand.intRangeAtMost(u8, 0, 255),
+                .left = rand.intRangeAtMost(u8, 0, 255),
+            };
+        }
 
         rl.endDrawing();
     }
+    state.*.app_state = .closing;
 }

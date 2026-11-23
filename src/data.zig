@@ -6,29 +6,12 @@
 const html_element = @import("types.zig").html_element;
 const html_element_id = @import("types.zig").html_element_group_id;
 const html_element_class = @import("types.zig").html_element_group_class_names;
+const css_declaration = @import("types.zig").css_declaration;
 
 pub fn get_element_selector_from_id(id: u8) [:0]const u8 {
     if (id >= html_elements.len) return html_elements[html_elements.len - 1].selector;
     return html_elements[id].selector;
 }
-// pub const html_elements = [_]html_element{
-//     .{ .id = 0, .html_tag = .html, .level = 0, .selector = "html" },
-//     .{ .id = 1, .html_tag = .body, .level = 1, .selector = "body" },
-//
-//     .{ .id = 2, .html_tag = .p, .level = 2, .selector = "body > p" },
-//
-//     .{ .id = 3, .html_tag = .div, .level = 2, .selector = "body > div:nth-of-type(1)" },
-//     .{ .id = 4, .html_tag = .p, .level = 3, .selector = "body > div:nth-of-type(1) > p" },
-//     .{ .id = 5, .html_tag = .a, .level = 4, .selector = "body > div:nth-of-type(1) > p > a" },
-//
-//     .{ .id = 6, .html_tag = .a, .level = 2, .selector = "body > a" },
-//
-//     .{ .id = 7, .html_tag = .div, .level = 2, .selector = "body > div:nth-of-type(2)" },
-//     .{ .id = 8, .html_tag = .span, .level = 3, .selector = "body > div:nth-of-type(2) > span" },
-//     .{ .id = 9, .html_tag = .ol, .level = 3, .selector = "body > div:nth-of-type(2) > ol" },
-//     .{ .id = 10, .html_tag = .li, .level = 4, .selector = "body > div:nth-of-type(2) > ol > li:nth-of-type(1)" },
-//     .{ .id = 11, .html_tag = .li, .level = 4, .selector = "body > div:nth-of-type(2) > ol > li:nth-of-type(2)" },
-// };
 
 pub const html_elements = [_]html_element{
     .{ .id = 0, .html_tag = .html, .level = 0, .selector = "html" },
@@ -87,42 +70,42 @@ pub const html_element_ids = [_]html_element_id{
 pub const html_element_classes = [_]html_element_class{
     .{
         .class_name = "link-button",
-        .elements_id = &.{ 12, 15, 18, 21, 24, 34 },
+        .elements_id = .{ 12, 15, 18, 21, 24, 34 },
         .count_elements = 6,
     },
     .{
         .class_name = "icon",
-        .elements_id = &.{ 13, 16, 19, 22, 25 },
+        .elements_id = .{ 13, 16, 19, 22, 25 },
         .count_elements = 5,
     },
     .{
         .class_name = "discord-icon",
-        .elements_id = &.{13},
+        .elements_id = .{13},
         .count_elements = 1,
     },
     .{
         .class_name = "youtube-icon",
-        .elements_id = &.{16},
+        .elements_id = .{16},
         .count_elements = 1,
     },
     .{
         .class_name = "github-icon",
-        .elements_id = &.{19},
+        .elements_id = .{19},
         .count_elements = 1,
     },
     .{
         .class_name = "mic-icon",
-        .elements_id = &.{22},
+        .elements_id = .{22},
         .count_elements = 1,
     },
     .{
         .class_name = "linkedin-icon",
-        .elements_id = &.{25},
+        .elements_id = .{25},
         .count_elements = 1,
     },
     .{
         .class_name = "controls",
-        .elements_id = &.{33},
+        .elements_id = .{33},
         .count_elements = 1,
     },
 };
