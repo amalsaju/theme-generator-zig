@@ -5,24 +5,67 @@ const types = @import("types.zig");
 const html_parsed_data = @import("data.zig").html_elements;
 const css_property_names = @import("types.zig").css_property_names;
 
+pub const dependencies = [_][:0]const u8{
+    "index.html",
+
+    // Logos
+    "img/logo.png",
+    "img/logo.svg",
+    "img/github.svg",
+    "img/linkedin.svg",
+    "img/mic.svg",
+    "img/youtube.svg",
+    "img/discord.svg",
+
+    // CSS files
+    "styles/default.css",
+    "styles/retro.css",
+    "styles/chaos.css",
+    "styles/minecraft.css",
+    "styles/mario.css",
+    "styles/liquid-glass.css",
+    "styles/blank.css",
+};
+
+pub fn check_dependencies(io: std.Io, state: *const shared_state) bool {
+    const dir = std.Io.Dir.openDirAbsolute(io, state.working_directory[0..], .{}) catch |err| {
+        std.log.err("Directory not accessible - {s} : {any}", .{ state.working_directory[0..], err });
+        return false;
+    };
+    defer dir.close(io);
+
+    for (dependencies) |dependency_path| {
+        dir.access(io, dependency_path, .{}) catch |err| {
+            std.log.warn("Missing dependency - {s}: {any}", .{ dependency_path, err });
+            return false;
+        };
+    }
+    return true;
+}
+
 pub fn write_css_declaration(writer: *std.Io.Writer, declaration: types.css_declaration) !void {
     const name = css_property_names[@backingInt(declaration.css_property)];
 
     try writer.print("      {s}: ", .{name});
+    log.info("{s}", .{name});
 
     switch (declaration.css_property_value) {
         .color_value => |color| {
             try writer.print("#{x:0>2}{x:0>2}{x:0>2}", .{ color.r, color.g, color.b });
+            log.info("#{x:0>2}{x:0>2}{x:0>2}", .{ color.r, color.g, color.b });
         },
         .edge_value => |edge| {
-            try writer.print("{d}px {d}px {d}px {d}px ", .{ edge.top, edge.right, edge.bottom, edge.left });
+            try writer.print("{d}px {d}px {d}px {d}px", .{ edge.top, edge.right, edge.bottom, edge.left });
+            log.info("{d}px {d}px {d}px {d}px", .{ edge.top, edge.right, edge.bottom, edge.left });
         },
         .size_value => |size| {
-            try writer.print("{d}px ", .{size});
+            try writer.print("{d}px", .{size});
+            log.info("{d}px", .{size});
         },
     }
 
     try writer.writeAll(";\n");
+    log.info(";\n", .{});
 }
 
 pub fn write_rule(writer: *std.Io.Writer, selector: []const u8, declarations: []const types.css_declaration) !void {
@@ -32,6 +75,28 @@ pub fn write_rule(writer: *std.Io.Writer, selector: []const u8, declarations: []
     }
 
     try writer.writeAll("}\n\n");
+}
+
+pub fn create_css_file(io: std.Io, state: *const shared_state) !void {
+    const dir = try std.Io.Dir.openDirAbsolute(io, state.working_directory[0..], .{});
+    defer dir.close(io);
+
+    var path_buf: [255]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buf, "styles/{s}.css", .{state.theme_name.value[0..state.theme_name.length]});
+    const file = try dir.createFile(io, path, .{});
+    defer file.close(io);
+}
+
+pub fn remove_css_file(io: std.Io, state: *const shared_state) !void {
+    const dir = try std.Io.Dir.openDirAbsolute(io, state.working_directory[0..], .{});
+    defer dir.close(io);
+
+    var path_buf: [255]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buf, "styles/{s}.css", .{state.theme_name.value[0..state.theme_name.length]});
+    try dir.deleteFile(
+        io,
+        path,
+    );
 }
 
 pub fn save_css(io: std.Io, state: *const shared_state) !void {
@@ -53,27 +118,39 @@ pub fn save_css(io: std.Io, state: *const shared_state) !void {
     });
 
     // goes through all 50 styles
-    for (state.css_style_list[0..state.css_style_list_count]) |style| {
+    for (state.css_style_list[0..50], 0..) |style, i| {
         // all the ids
-        if (style.id_css_declarations_count > 0) {
+        if (style.id_css_declarations_count > 0 and style.html_id.length > 0) {
             var selector_buffer: [100]u8 = undefined;
 
             // add the hash in front of the id
             const selector = try std.mem.print(&selector_buffer, "#{s}", .{style.html_id.value[0..style.html_id.length]});
+            std.log.info("Writing selector information - Selector: {s} | Style Count: {d} ", .{
+                selector,
+                style.selector_css_declarations_count,
+            });
             try write_rule(writer, selector, style.id_css_declarations[0..style.id_css_declarations_count]);
         }
 
         // all the path selectors
         if (style.selector_css_declarations_count > 0) {
-            const selector = std.mem.sliceTo(html_parsed_data[style.id].selector, 0); // the selector should be 0 terminated here I think
+            const selector = std.mem.sliceTo(html_parsed_data[i].selector, 0); // the selector should be 0 terminated here I think
+            std.log.info("Writing selector information - Selector: {s} | Style Count: {d} ", .{
+                selector,
+                style.selector_css_declarations_count,
+            });
             try write_rule(writer, selector, style.selector_css_declarations[0..style.selector_css_declarations_count]);
         }
         // all the tag selectors
         if (style.tag_css_declarations_count > 0) {
+            std.log.info("Writing tag information - Tag: {s} | Style Count: {d} ", .{
+                @tagName(html_parsed_data[i].html_tag),
+                style.tag_css_declarations_count,
+            });
             try write_rule(
                 writer,
-                @tagName(html_parsed_data[style.id].html_tag),
-                style.selector_css_declarations[0..style.selector_css_declarations_count],
+                @tagName(html_parsed_data[i].html_tag),
+                style.tag_css_declarations[0..style.tag_css_declarations_count],
             );
         }
     }
@@ -97,6 +174,27 @@ pub fn update_index_html(io: std.Io, state: *const shared_state) !void {
     });
 
     const result_index_html = std.mem.print(modified_html[0..], "{s}{s}{s}", .{ file[0..pos], new_theme, file[pos..file.len] }) catch unreachable;
+
+    try dir.writeFile(io, .{ .sub_path = "index.html", .data = result_index_html });
+}
+
+pub fn cleanup_index_html(io: std.Io, state: *const shared_state) !void {
+    const dir = try std.Io.Dir.openDirAbsolute(io, state.working_directory[0..], .{});
+    defer dir.close(io);
+
+    var index_html: [10 * 1024]u8 = undefined;
+    const file = dir.readFile(io, "index.html", &index_html) catch unreachable;
+
+    const pos_select = std.mem.lastIndexOf(u8, file, "</select>") orelse 0;
+    var modified_html: [20 * 1024]u8 = undefined;
+    var new_theme_buf: [255]u8 = undefined;
+    const new_theme = try std.fmt.bufPrint(&new_theme_buf, "<option value=\"{s}.css\">{s} by {s}</option>\n", .{
+        state.theme_name.value[0..state.theme_name.length],
+        state.theme_name.value[0..state.theme_name.length],
+        state.author_name.value[0..state.author_name.length],
+    });
+    const last_option_select = std.mem.lastIndexOf(u8, file, new_theme) orelse 0;
+    const result_index_html = std.mem.print(modified_html[0..], "{s}{s}", .{ file[0..last_option_select], file[pos_select..file.len] }) catch unreachable;
 
     try dir.writeFile(io, .{ .sub_path = "index.html", .data = result_index_html });
 }

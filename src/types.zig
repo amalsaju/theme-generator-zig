@@ -94,9 +94,15 @@ pub const css_declaration = struct {
     css_property_value: css_property_value,
 };
 
-// TODO: Add in ids and classes
+pub const css_target = union(enum) {
+    selector: u16,
+    tag: tag,
+    id: u16,
+    //class: u16,
+};
+
 pub const css_property_change_event = struct {
-    element: u8, // which element is being changed
+    target: css_target,
     css_property: css_property,
     css_property_value: css_property_value,
 };

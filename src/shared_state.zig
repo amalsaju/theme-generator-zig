@@ -6,8 +6,9 @@ const css_declaration = @import("types.zig").css_declaration;
 
 const application_state = enum {
     opening,
-    ui_1,
-    ui_2,
+    start_section,
+    main_section,
+    css_preview_section,
     closing,
 };
 
@@ -17,10 +18,9 @@ pub const state = struct {
     app_state: application_state = undefined,
     working_directory: [256:0]u8 = @splat(0),
     css_style_list: [50]style = undefined, // we only have a max of like 43 elements
-    css_style_list_count: u8 = 0,
     theme_name: string = .{},
     author_name: string = .{},
-    update_files: bool = false,
+    is_theme_saved: bool = false,
 
     pub fn init(self: *state) void {
         self.event_queue = .init(&self.storage);
@@ -46,6 +46,6 @@ pub const state = struct {
         self.author_name.length = default_author_name.len;
 
         @memcpy(self.working_directory[0..default_path.len], default_path);
-        self.app_state = .ui_1;
+        self.app_state = .start_section;
     }
 };

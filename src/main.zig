@@ -20,9 +20,21 @@ pub fn main(init: std.process.Init) !void {
         log.err("{}", .{err});
     };
 
-    if (state.update_files) {
+    if (state.is_theme_saved) {
         file_writer.save_css(init.io, &state) catch unreachable;
         file_writer.update_index_html(init.io, &state) catch unreachable;
+    } else {
+        if (file_writer.remove_css_file(init.io, &state)) {
+            std.log.info("Removed css file {s}.css", .{state.theme_name.value[0..state.theme_name.length]});
+        } else |err| {
+            std.log.err("Unable to remove css file {s}.css - Err: {any}", .{ state.theme_name.value[0..state.theme_name.length], err });
+        }
+
+        if (file_writer.cleanup_index_html(init.io, &state)) {
+            std.log.info("Cleaned up index.html file", .{});
+        } else |err| {
+            std.log.err("Unable to clean up index.html file - Err: {any}", .{err});
+        }
     }
 
     std.log.info("Quiting...", .{});
